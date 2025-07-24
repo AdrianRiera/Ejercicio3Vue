@@ -1,11 +1,12 @@
 <script setup>
-import {ref, reactive, watch} from 'vue';
+import {ref, reactive, watch, computed, onMounted} from 'vue';
 import { generarId } from './helpers';
 import Presupuesto from './components/Presupuesto.vue'
 import ControlPresupuesto from './components/ControlPresupuesto.vue';
 import iconoNuevoGasto from './assets/Materiales/img/nuevo-gasto.svg';
 import Modal from './components/Modal.vue';
 import Gasto from './components/Gasto.vue';
+import Filtros from './components/Filtros.vue';
 
 
 const modal = reactive({
@@ -16,7 +17,7 @@ const modal = reactive({
 const presupuesto = ref(0);
 const disponible = ref(0);
 const gastado= ref(0);
-
+const filtro = ref('');
 
 const gasto= reactive({
     nombre: '',
@@ -31,6 +32,7 @@ watch(gastos, () => {
     const gastadoTotal = gastos.value.reduce((total, gasto) => total + gasto.cantidad, 0);
     gastado.value = gastadoTotal;
     disponible.value = presupuesto.value - gastadoTotal;
+    localStorage.setItem('gastos', JSON.stringify(gastos.value));
 }, {deep: true});
 
 watch(modal, () => {
@@ -38,6 +40,28 @@ watch(modal, () => {
         reiniciarStateGasto();
     }
 }, {deep: true});
+
+watch(presupuesto, () => {
+  localStorage.setItem('presupuesto', presupuesto.value);
+});
+
+
+
+onMounted(() => {
+    const presupuestoLocal = Number(localStorage.getItem('presupuesto')) || 0;
+    if (presupuestoLocal > 0) {
+        presupuesto.value = presupuestoLocal;
+        disponible.value = presupuestoLocal;
+    }
+    const gastosLocal = JSON.parse(localStorage.getItem('gastos')) || [];
+    if (gastosLocal.length > 0) {
+        gastos.value = gastosLocal;
+        const gastadoTotal = gastosLocal.reduce((total, gasto) => total + gasto.cantidad, 0);
+        gastado.value = gastadoTotal;
+        disponible.value = presupuesto.value - gastadoTotal;
+    }
+
+});
 
 const definirPresupuesto= (cantidad)  => {
     presupuesto.value = cantidad;
@@ -101,6 +125,24 @@ const eliminarGasto = (id) => {
     if (i !== -1) {
         gastos.value.splice(i, 1);
     }
+    quitarModal();
+};
+
+const gastosFiltrados = computed(() => {
+    if (!filtro.value) return gastos.value;
+    return gastos.value.filter(gasto => gasto.categoria === filtro.value);
+});
+
+const resetearApp = () => {
+  if (confirm('¿Estás seguro de que quieres reiniciar la aplicación?')){
+    presupuesto.value = 0;
+    disponible.value = 0;
+    gastado.value = 0;
+    gastos.value = [];
+    localStorage.removeItem('gastos');
+    localStorage.removeItem('presupuesto');
+    reiniciarStateGasto();
+    }
 };
 </script>
 
@@ -117,6 +159,7 @@ const eliminarGasto = (id) => {
         />
         <ControlPresupuesto 
           v-else
+          @resetear-app="resetearApp"
           :presupuesto="presupuesto"
           :disponible="disponible"
           :gastado="gastado"
@@ -127,11 +170,13 @@ const eliminarGasto = (id) => {
 
     </header>
     <main v-if="presupuesto > 0">
-      
+      <Filtros
+        v-model:filtro="filtro"
+      />
       <div class="listado-gastos contenedor">
-        <h2>{{ gastos.length > 0 ? 'Gastos' : 'No hay gastos' }}</h2>
+        <h2>{{ gastosFiltrados.length > 0 ? 'Gastos' : 'No hay gastos' }}</h2>
         <Gasto
-          v-for="gasto in gastos"
+          v-for="gasto in gastosFiltrados"
           :key="gasto.id"
           :gasto="gasto"
           @seleccionar-gasto="seleccionarGasto"
